@@ -1,9 +1,11 @@
 from dotenv import load_dotenv
+
 load_dotenv()  # debe ser lo primero antes de cualquier os.environ.get()
 
 import os
 import json
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import requests
 from datetime import datetime
 from flask import Flask, request, jsonify, Response, stream_with_context
@@ -11,71 +13,76 @@ from requests.auth import HTTPBasicAuth
 import anthropic
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
+
 BLOG_AGENT_URL = os.environ.get("BLOG_AGENT_URL", "https://agente-blogs-production.up.railway.app")
 SEO_AGENT_URL  = os.environ.get("SEO_AGENT_URL",  "https://web-production-3743c.up.railway.app")
+WC_URL         = os.environ.get("WC_STORE_URL", "").rstrip("/")
+WC_KEY         = os.environ.get("WC_CONSUMER_KEY", "")
+WC_SECRET      = os.environ.get("WC_CONSUMER_SECRET", "")
+DATABASE_URL   = os.environ.get("DATABASE_URL", "")   # Railway inyecta esto automáticamente
+MODEL          = "claude-sonnet-4-6"
 
-WC_URL    = os.environ.get("WC_STORE_URL", "").rstrip("/")
-WC_KEY    = os.environ.get("WC_CONSUMER_KEY", "")
-WC_SECRET = os.environ.get("WC_CONSUMER_SECRET", "")
-DB_PATH   = os.environ.get("DB_PATH", "content.db")
-MODEL     = "claude-sonnet-4-6"
-
-app = Flask(__name__)
+app    = Flask(__name__)
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
-# ─── BASE DE DATOS ────────────────────────────────────────────────────────────
+# ─── BASE DE DATOS (PostgreSQL) ───────────────────────────────────────────────
+
+def get_conn():
+    """Retorna una conexión a PostgreSQL usando DATABASE_URL de Railway."""
+    return psycopg2.connect(DATABASE_URL)
 
 def init_db():
-    con = sqlite3.connect(DB_PATH)
+    con = get_conn()
     cur = con.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS conversations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id         SERIAL PRIMARY KEY,
             session_id TEXT,
-            role TEXT,
-            content TEXT,
+            role       TEXT,
+            content    TEXT,
             created_at TEXT
         )
     """)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS content_library (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            platform TEXT,
+            id           SERIAL PRIMARY KEY,
+            title        TEXT,
+            platform     TEXT,
             content_type TEXT,
-            content TEXT,
-            product TEXT,
-            created_at TEXT
+            content      TEXT,
+            product      TEXT,
+            created_at   TEXT
         )
     """)
     con.commit()
+    cur.close()
     con.close()
 
 init_db()
 
-
 def save_messages(session_id, messages):
-    con = sqlite3.connect(DB_PATH)
+    con = get_conn()
     cur = con.cursor()
-    cur.execute("DELETE FROM conversations WHERE session_id = ?", (session_id,))
+    cur.execute("DELETE FROM conversations WHERE session_id = %s", (session_id,))
     for m in messages:
         content = m["content"] if isinstance(m["content"], str) else json.dumps(m["content"])
         cur.execute(
-            "INSERT INTO conversations (session_id, role, content, created_at) VALUES (?,?,?,?)",
+            "INSERT INTO conversations (session_id, role, content, created_at) VALUES (%s, %s, %s, %s)",
             (session_id, m["role"], content, datetime.now().isoformat())
         )
     con.commit()
+    cur.close()
     con.close()
 
-
 def load_messages(session_id):
-    con = sqlite3.connect(DB_PATH)
+    con = get_conn()
     cur = con.cursor()
     cur.execute(
-        "SELECT role, content FROM conversations WHERE session_id = ? ORDER BY id",
+        "SELECT role, content FROM conversations WHERE session_id = %s ORDER BY id",
         (session_id,)
     )
     rows = cur.fetchall()
+    cur.close()
     con.close()
     messages = []
     for role, content in rows:
@@ -85,7 +92,6 @@ def load_messages(session_id):
         except Exception:
             messages.append({"role": role, "content": content})
     return messages
-
 
 # ─── HERRAMIENTAS ─────────────────────────────────────────────────────────────
 
@@ -118,42 +124,42 @@ def get_products(per_page=20):
     except Exception as e:
         return {"error": str(e)}
 
-
 def save_content(title, platform, content_type, content, product=""):
     try:
-        con = sqlite3.connect(DB_PATH)
+        con = get_conn()
         cur = con.cursor()
         cur.execute(
-            "INSERT INTO content_library (title, platform, content_type, content, product, created_at) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO content_library (title, platform, content_type, content, product, created_at) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
             (title, platform, content_type, content, product, datetime.now().isoformat())
         )
+        item_id = cur.fetchone()[0]
         con.commit()
-        item_id = cur.lastrowid
+        cur.close()
         con.close()
         return {"success": True, "id": item_id, "saved": title}
     except Exception as e:
         return {"error": str(e)}
 
-
 def list_content(platform=None, content_type=None, limit=10):
     try:
-        con = sqlite3.connect(DB_PATH)
+        con = get_conn()
         cur = con.cursor()
-        query = "SELECT id, title, platform, content_type, product, created_at FROM content_library"
+        query  = "SELECT id, title, platform, content_type, product, created_at FROM content_library"
         params = []
         filters = []
         if platform:
-            filters.append("platform = ?")
+            filters.append("platform = %s")
             params.append(platform)
         if content_type:
-            filters.append("content_type = ?")
+            filters.append("content_type = %s")
             params.append(content_type)
         if filters:
             query += " WHERE " + " AND ".join(filters)
-        query += " ORDER BY created_at DESC LIMIT ?"
+        query += " ORDER BY created_at DESC LIMIT %s"
         params.append(int(limit))
         cur.execute(query, params)
         rows = cur.fetchall()
+        cur.close()
         con.close()
         return [
             {
@@ -164,7 +170,6 @@ def list_content(platform=None, content_type=None, limit=10):
         ]
     except Exception as e:
         return {"error": str(e)}
-
 
 # ─── INTEGRACIÓN CON AGENTES HERMANOS ────────────────────────────────────────
 
@@ -179,7 +184,6 @@ def publicar_blog(topic=None, site_key="peptidosysuplementos"):
     except Exception as e:
         return {"error": str(e)}
 
-
 def estado_agente_blogs():
     try:
         r = requests.get(f"{BLOG_AGENT_URL}/status", timeout=10)
@@ -188,27 +192,25 @@ def estado_agente_blogs():
     except Exception as e:
         return {"error": str(e)}
 
-
 def consultar_agente_seo(instruccion):
     try:
         messages = [{"role": "user", "content": instruccion}]
         r = requests.post(
             f"{SEO_AGENT_URL}/chat",
             json={"messages": messages},
-            timeout=45  # reducido de 60 para no bloquear demasiado el hilo
+            timeout=45
         )
         r.raise_for_status()
         return {"respuesta": r.json().get("reply", "Sin respuesta")}
     except Exception as e:
         return {"error": str(e)}
 
-
 TOOL_FNS = {
-    "get_products":         get_products,
-    "save_content":         save_content,
-    "list_content":         list_content,
-    "publicar_blog":        publicar_blog,
-    "estado_agente_blogs":  estado_agente_blogs,
+    "get_products":       get_products,
+    "save_content":       save_content,
+    "list_content":       list_content,
+    "publicar_blog":      publicar_blog,
+    "estado_agente_blogs": estado_agente_blogs,
     "consultar_agente_seo": consultar_agente_seo,
 }
 
@@ -220,7 +222,6 @@ def run_tool(name, inputs):
         return fn(**inputs)
     except Exception as e:
         return {"error": str(e)}
-
 
 # ─── SYSTEM PROMPT (con prompt caching) ──────────────────────────────────────
 
@@ -253,11 +254,11 @@ TIKTOK:
 ESTRUCTURA DE UN VIDEO QUE CONVIERTE
 ══════════════════════════════════════════════
 
-0-3s   HOOK     → Para el scroll. Sin intro, sin "hola soy X"
-3-15s  PROBLEMA → Conecta con el dolor o deseo del espectador
-15-45s SOLUCIÓN → El producto como respuesta, con datos reales
-45-55s PRUEBA   → Resultado, ingrediente clave, respaldo cientifico
-55-60s CTA      → Accion especifica y urgente
+0-3s   HOOK      → Para el scroll. Sin intro, sin "hola soy X"
+3-15s  PROBLEMA  → Conecta con el dolor o deseo del espectador
+15-45s SOLUCIÓN  → El producto como respuesta, con datos reales
+45-55s PRUEBA    → Resultado, ingrediente clave, respaldo cientifico
+55-60s CTA       → Accion especifica y urgente
 
 ══════════════════════════════════════════════
 HOOKS QUE CONVIERTEN — EJEMPLOS REALES DEL NICHO
@@ -351,11 +352,11 @@ AGENTES INTEGRADOS
 ══════════════════════════════════════════════
 
 🔵 AGENTE SEO → consultar_agente_seo
-   Obtiene titulos y keywords reales del catalogo para enriquecer captions
+Obtiene titulos y keywords reales del catalogo para enriquecer captions
 
 🟣 AGENTE DE BLOGS → publicar_blog + estado_agente_blogs
-   Publica un blog complementario al video el mismo dia
-   Pipeline: Google Trends → Claude escribe → Unsplash → WordPress
+Publica un blog complementario al video el mismo dia
+Pipeline: Google Trends → Claude escribe → Unsplash → WordPress
 
 ESTRATEGIA CRUZADA: video + blog el mismo dia = mas SEO + mas alcance
 
@@ -405,7 +406,6 @@ CTA:
 
 Responde siempre en espanol salvo que el usuario escriba en ingles."""
 
-# Sistema con cache_control para reducir costo y latencia en llamadas repetidas
 SYSTEM = [
     {
         "type": "text",
@@ -432,11 +432,11 @@ TOOLS = [
             "type": "object",
             "required": ["title", "platform", "content_type", "content"],
             "properties": {
-                "title": {"type": "string", "description": "Titulo descriptivo, ej: 'Script Reel BPC-157 30s Hook Recuperacion'"},
-                "platform": {"type": "string", "description": "instagram | tiktok | ambas"},
+                "title":        {"type": "string", "description": "Titulo descriptivo, ej: 'Script Reel BPC-157 30s Hook Recuperacion'"},
+                "platform":     {"type": "string", "description": "instagram | tiktok | ambas"},
                 "content_type": {"type": "string", "description": "script | caption | hook | calendar | hashtags | guion"},
-                "content": {"type": "string", "description": "El contenido completo generado"},
-                "product": {"type": "string", "description": "Nombre del producto asociado (vacio si es general)", "default": ""}
+                "content":      {"type": "string", "description": "El contenido completo generado"},
+                "product":      {"type": "string", "description": "Nombre del producto asociado (vacio si es general)", "default": ""}
             }
         }
     },
@@ -446,9 +446,9 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "platform": {"type": "string", "description": "instagram | tiktok | ambas"},
+                "platform":     {"type": "string", "description": "instagram | tiktok | ambas"},
                 "content_type": {"type": "string", "description": "script | caption | hook | calendar | hashtags"},
-                "limit": {"type": "integer", "default": 10}
+                "limit":        {"type": "integer", "default": 10}
             }
         }
     },
@@ -458,7 +458,7 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "topic": {"type": "string", "description": "Tema especifico (ej: 'BPC-157 para recuperacion muscular'). Omitir para usar tendencias automaticamente."},
+                "topic":    {"type": "string", "description": "Tema especifico (ej: 'BPC-157 para recuperacion muscular'). Omitir para usar tendencias automaticamente."},
                 "site_key": {"type": "string", "default": "peptidosysuplementos"}
             }
         }
@@ -484,22 +484,15 @@ TOOLS = [
     }
 ]
 
-
 # ─── RUTAS ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
     return open("templates/index.html", encoding="utf-8").read()
 
-
 @app.route("/chat", methods=["POST"])
 def chat():
-    """
-    Endpoint de chat con streaming SSE.
-    Fase 1: tool calls sincrónicos (rápidos — fetch de datos).
-    Fase 2: respuesta final streamed token a token desde Claude.
-    """
-    body = request.json
+    body       = request.json
     session_id = body.get("session_id", "default")
     new_messages = body.get("messages", [])
 
@@ -524,7 +517,6 @@ def chat():
             )
 
             while response.stop_reason == "tool_use":
-                # notifica al usuario que se está consultando una herramienta
                 tool_names = [b.name for b in response.content if b.type == "tool_use"]
                 yield f"data: {json.dumps({'tool': ', '.join(tool_names)})}\n\n"
 
@@ -560,15 +552,11 @@ def chat():
 
             # ── Fase 2: stream la respuesta final token a token ───────────────
             full_reply = ""
-            final_messages_for_stream = messages + []
-
-            # Usamos stream() para la llamada final (el texto largo del script)
             with client.messages.stream(
                 model=MODEL,
                 max_tokens=8192,
                 system=SYSTEM,
-                messages=final_messages_for_stream,
-                # Sin tools en la llamada final para forzar respuesta de texto puro
+                messages=messages,
             ) as stream:
                 for text_chunk in stream.text_stream:
                     full_reply += text_chunk
@@ -588,36 +576,33 @@ def chat():
         stream_with_context(generate()),
         mimetype="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control":    "no-cache",
             "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
+            "Connection":       "keep-alive",
         },
     )
 
-
 @app.route("/content", methods=["GET"])
 def content_library():
-    platform = request.args.get("platform")
+    platform     = request.args.get("platform")
     content_type = request.args.get("type")
     items = list_content(platform, content_type, limit=30)
     return jsonify({"items": items})
 
-
 @app.route("/chat/clear", methods=["POST"])
 def clear_chat():
     session_id = request.json.get("session_id", "default")
-    con = sqlite3.connect(DB_PATH)
+    con = get_conn()
     cur = con.cursor()
-    cur.execute("DELETE FROM conversations WHERE session_id = ?", (session_id,))
+    cur.execute("DELETE FROM conversations WHERE session_id = %s", (session_id,))
     con.commit()
+    cur.close()
     con.close()
     return jsonify({"success": True})
-
 
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "model": MODEL, "agent": "social-video-agent"})
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
