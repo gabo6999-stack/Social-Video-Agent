@@ -550,17 +550,15 @@ def chat():
                     messages=messages,
                 )
 
-            # ── Fase 2: stream la respuesta final token a token ───────────────
+            # ── Fase 2: extraer texto de la respuesta final de Fase 1 ────────
+            # Phase 1 ya tiene la respuesta final en response.content.
+            # Una segunda llamada sin tools= falla con 400 cuando hay
+            # tool_use/tool_result en el historial.
             full_reply = ""
-            with client.messages.stream(
-                model=MODEL,
-                max_tokens=8192,
-                system=SYSTEM,
-                messages=messages,
-            ) as stream:
-                for text_chunk in stream.text_stream:
-                    full_reply += text_chunk
-                    yield f"data: {json.dumps({'text': text_chunk})}\n\n"
+            for block in response.content:
+                if hasattr(block, "text") and block.text:
+                    full_reply += block.text
+                    yield f"data: {json.dumps({'text': block.text})}\n\n"
 
             # ── Guardar en DB ─────────────────────────────────────────────────
             if full_reply:
