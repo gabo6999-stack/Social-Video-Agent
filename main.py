@@ -521,7 +521,6 @@ def chat():
                 system=SYSTEM,
                 tools=TOOLS,
                 messages=messages,
-                betas=["prompt-caching-2024-07-31"],
             )
 
             while response.stop_reason == "tool_use":
@@ -557,7 +556,6 @@ def chat():
                     system=SYSTEM,
                     tools=TOOLS,
                     messages=messages,
-                    betas=["prompt-caching-2024-07-31"],
                 )
 
             # ── Fase 2: stream la respuesta final token a token ───────────────
