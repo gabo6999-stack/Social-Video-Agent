@@ -1,0 +1,6 @@
+.env
+content.db
+__pycache__/
+*.pyc
+sessions/
+*.log
