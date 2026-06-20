@@ -25,6 +25,23 @@ MODEL          = "claude-sonnet-4-6"
 app    = Flask(__name__)
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
+
+def notify_nexus(action, detail=None, url=None):
+    """Reporta una actividad a NEXUS (Centro de Comando). Solo corre si hay NEXUS_URL y NEXUS_KEY."""
+    nexus_url = os.environ.get("NEXUS_URL")
+    nexus_key = os.environ.get("NEXUS_KEY")
+    if not nexus_url or not nexus_key:
+        return
+    try:
+        requests.post(
+            f"{nexus_url}/api/ingest",
+            json={"agent": "Social Video Agent", "action": action, "detail": detail, "url": url},
+            headers={"x-nexus-key": nexus_key},
+            timeout=15,
+        )
+    except Exception as e:
+        print(f"[NEXUS] No se pudo reportar: {e}")
+
 # ─── BASE DE DATOS (PostgreSQL) ───────────────────────────────────────────────
 
 def get_conn():
@@ -136,6 +153,10 @@ def save_content(title, platform, content_type, content, product=""):
         con.commit()
         cur.close()
         con.close()
+        notify_nexus(
+            action="Generó un script de video",
+            detail=f"{content_type} — {title} ({platform})",
+        )
         return {"success": True, "id": item_id, "saved": title}
     except Exception as e:
         return {"error": str(e)}
