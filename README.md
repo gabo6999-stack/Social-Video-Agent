@@ -1,4 +1,4 @@
-# Social Video Agent (multisitio)
+# Social Media Agent (multisitio)
 
 Agente con Claude API que genera guiones de video para Instagram Reels y
 TikTok — hook, escenas con timing, caption, hashtags y CTA — con datos reales

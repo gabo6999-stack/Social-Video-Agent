@@ -40,7 +40,7 @@ def notify_nexus(action, detail=None, url=None):
     try:
         requests.post(
             f"{nexus_url}/api/ingest",
-            json={"agent": "Social Video Agent", "action": action, "detail": detail, "url": url},
+            json={"agent": "Social Media Agent", "action": action, "detail": detail, "url": url},
             headers={"x-nexus-key": nexus_key},
             timeout=15,
         )
@@ -584,7 +584,7 @@ def clear_chat():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "model": MODEL, "agent": "social-video-agent", "sites": list_sites()})
+    return jsonify({"status": "ok", "model": MODEL, "agent": "social-media-agent", "sites": list_sites()})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

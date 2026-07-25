@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Video Agent — multisitio</title>
+<title>Social Media Agent — multisitio</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -334,7 +334,7 @@
 <!-- Pantalla de seleccion de sitio + plataforma -->
 <div id="setup-gate">
   <div id="setup-card">
-    <h2>🎬 Video Agent</h2>
+    <h2>🎬 Social Media Agent</h2>
     <div class="hint">¿Para qué sitio y red social vas a trabajar?</div>
 
     <label for="site-select">Sitio</label>
@@ -352,7 +352,7 @@
 
 <header>
   <div>
-    <h1 id="hdr-title">🎬 Video Agent</h1>
+    <h1 id="hdr-title">🎬 Social Media Agent</h1>
     <span id="hdr-sub">Instagram Reels &amp; TikTok • claude-sonnet-4-6</span>
   </div>
   <div class="header-actions">
@@ -391,7 +391,7 @@
     <div id="chat">
       <div class="empty-state" id="empty">
         <div class="logo">🎬</div>
-        <h2 id="empty-title">Video Agent listo</h2>
+        <h2 id="empty-title">Social Media Agent listo</h2>
         <p id="empty-desc">Genera scripts para Reels y TikTok, hooks virales, captions con hashtags y calendarios.</p>
       </div>
     </div>
@@ -485,7 +485,7 @@ function mountApp() {
   document.getElementById('setup-gate').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
 
-  document.getElementById('hdr-title').textContent = '🎬 Video Agent — ' + ACTIVE_SITE.brand;
+  document.getElementById('hdr-title').textContent = '🎬 Social Media Agent — ' + ACTIVE_SITE.brand;
   document.getElementById('hdr-sub').textContent = ACTIVE_SITE.activePlatforms.join(' + ') + ' • claude-sonnet-4-6';
   document.getElementById('empty-title').textContent = ACTIVE_SITE.brand + ' listo';
   document.getElementById('empty-desc').textContent = 'Genera scripts para Reels y TikTok, hooks virales, captions con hashtags y calendarios.';
