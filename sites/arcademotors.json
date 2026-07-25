@@ -1,0 +1,54 @@
+{
+  "key": "arcademotors",
+  "brand": "Arcademotors MX",
+  "site_url": "arcademotorsmx.com",
+  "niche": "Marketplace P2P de compra-venta de autos usados — conecta comprador y vendedor por WhatsApp, no interviene en la transacción",
+  "audience": "Fase actual (prioridad): dueños de autos que quieren vender rápido y sin curiosos. Fase futura: compradores buscando autos.",
+  "platforms": ["Instagram", "TikTok"],
+  "tone": "Informal, cercano, humor relatable — nada de jerga corporativa",
+  "goal": "Generar mensajes de WhatsApp de vendedores que quieran publicar su auto (no solo alcance)",
+  "business_context": "Marketplace mexicano P2P, contacto siempre por WhatsApp. Catálogo inicial pequeño (pocos autos publicados) — usar eso como ángulo de exclusividad/comunidad naciente, nunca ocultarlo. No hay quincenas ni temporadas fijas relevantes; el contenido es evergreen sobre el dolor de vender un auto solo.",
+  "brand_hashtags": ["#ArcadeMotorsMX", "#AutosUsadosMexico", "#VendoMiAuto"],
+  "product_angles": [
+    {"product": "Dolor del vendedor", "focus": "Curiosos, regateadores, gente que no llega a la cita, fantasmas de WhatsApp", "angle": "vender tu auto no debería sentirse como una pesadilla"},
+    {"product": "Exclusividad de comunidad naciente", "focus": "Catálogo chico = tu anuncio no se pierde entre miles", "angle": "sé de los primeros autos en la plataforma"},
+    {"product": "Comparativa vs. Marketplace/redes", "focus": "Por qué ahí no logras vender rápido", "angle": "hay una forma más simple"},
+    {"product": "Dato o verdad incómoda del mercado de autos usados", "focus": "Estadísticas o realidades del proceso de venta privada", "angle": "lo que nadie te dice de vender un auto usado"}
+  ],
+  "hooks_examples": [
+    "Si vendes tu auto en Marketplace y solo te escriben para regatear $500 pesos...",
+    "POV: son las 11pm y alguien te pregunta 'sigue disponible' y nunca contesta",
+    "3 señales de que la persona que te escribe por tu auto NO va a comprar",
+    "Los 4 tipos de curiosos que te escriben cuando vendes tu auto",
+    "Vender tu auto en México es un deporte extremo, y aquí tienes la prueba",
+    "Lo que nadie te dice de vender un auto usado por tu cuenta"
+  ],
+  "viral_formats": [
+    "Lista con humor: tipos de compradores/curiosos molestos",
+    "POV: situaciones frustrantes vendiendo por redes",
+    "Antes/después: cómo era vender solo vs con Arcademotors",
+    "Detrás de cámara: mostrar un listado real de la plataforma",
+    "Mitos vs realidad: vender un auto usado en México",
+    "Testimonial: vendedor que ya publicó su auto"
+  ],
+  "compliance": [
+    "No prometer 'compradores verificados' de forma absoluta — la plataforma no interviene en la transacción",
+    "No garantizar que el auto se va a vender ni en cuánto tiempo",
+    "Incluir siempre un disclaimer de seguridad al cerrar tratos (verificar antes de reunirse, lugar seguro)",
+    "No hacer humor sobre personas específicas, solo sobre situaciones",
+    "No mostrar información personal identificable de vendedores/compradores reales sin permiso"
+  ],
+  "tools": [],
+  "woocommerce": false,
+  "sibling_agents": [],
+  "quick_prompts": [
+    {"icon": "🎬", "label": "Script Reel 30s dolor del vendedor", "prompt": "Dame un script completo para un Reel de 30 segundos con el ángulo del dolor del vendedor (curiosos, regateadores, fantasmas)"},
+    {"icon": "🯝", "label": "5 Hooks virales TikTok", "prompt": "Genera 5 hooks virales para TikTok para captar vendedores de autos, tono informal"},
+    {"icon": "📅", "label": "Calendario 2 semanas captación", "prompt": "Crea un calendario de contenido de 2 semanas para captar vendedores, 4 posts por semana, variando ángulos"},
+    {"icon": "#️⃣", "label": "Hashtags autos México 2026", "prompt": "Dame los mejores hashtags para compra-venta de autos usados en México en 2026, separados por IG y TikTok"},
+    {"icon": "📱", "label": "Cómo funciona en 20s", "prompt": "Genera un script de 20-25 segundos explicando cómo funciona Arcademotors, tono informal"},
+    {"icon": "✨", "label": "Testimonial vendedor", "prompt": "Crea un guion tipo testimonial de un vendedor que ya publicó su auto en Arcademotors"},
+    {"icon": "📚", "label": "Ver biblioteca", "prompt": "Muestra todo el contenido guardado en la biblioteca"}
+  ],
+  "cross_prompts": []
+}

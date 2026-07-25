@@ -1,0 +1,70 @@
+{
+  "key": "peptidosysuplementos",
+  "brand": "Péptidos y Suplementos",
+  "site_url": "peptidosysuplementos.mx",
+  "niche": "Venta online de péptidos de investigación y suplementos deportivos/salud en México",
+  "audience": "Gente de gym, biohackers, personas de 25-45 buscando recuperación, rendimiento y anti-aging",
+  "platforms": ["Instagram", "TikTok"],
+  "tone": "Cercano, tutea, basado en evidencia — nunca como infomercial ni lenguaje corporativo",
+  "goal": "Scripts que conviertan: visitas al link en bio y ventas reales, no solo alcance",
+  "business_context": "Mercado México — tutear, no formal. Quincenas (1 y 15) son los mejores días para lanzar promociones en video. Picos de motivación fitness: Enero-Marzo y Agosto-Septiembre. Precios siempre en MXN. Envío gratis en pedidos de MX$7,500 o más — buen dato para CTA.",
+  "brand_hashtags": ["#PeptidosYSuplementos", "#MxFitness", "#BiohackingMX"],
+  "product_angles": [
+    {"product": "BPC-157 / TB-500 (recuperación)", "focus": "Lesiones crónicas, tendinitis, dolor articular, recuperación post-entreno", "angle": "la solución que los médicos no te ofrecen"},
+    {"product": "Retatrutide / análogos GLP-1 (composición corporal)", "focus": "Pérdida de grasa sin perder músculo, resistencia a la insulina", "angle": "la ciencia detrás de la pérdida de grasa eficiente"},
+    {"product": "GHK-Cu / MOTS-c / Longevidad", "focus": "Biohacking, anti-aging, salud celular, rendimiento cognitivo", "angle": "invierte en tu cuerpo ahora para los próximos 30 años"},
+    {"product": "IGF-1 LR3 / HGH (performance)", "focus": "Masa muscular, fuerza, recuperación, composición corporal", "angle": "rendimiento de siguiente nivel"},
+    {"product": "Proteínas / Creatina (basics)", "focus": "Onboarding gym, fundamentos, consistencia, primeros resultados", "angle": "lo que realmente funciona sin complicarse"}
+  ],
+  "hooks_examples": [
+    "¿Por qué yo me recupero en 2 días y tú en una semana?",
+    "El péptido que los atletas de élite no mencionan públicamente",
+    "Esto le pasa a tu cuerpo a los 30 si no haces nada",
+    "Probé el BPC-157 por 30 días. Aquí los resultados reales.",
+    "La razón por la que no ves resultados en el gym (no es tu dieta)",
+    "Lo que tu nutriólogo no te dice sobre la recuperación muscular",
+    "El error que comete el 90% de la gente que toma creatina",
+    "Si tienes más de 30 y entrenas, para y escucha esto"
+  ],
+  "viral_formats": [
+    "POV: un día en mi vida usando X péptido",
+    "Revelación: lo que nadie te dice sobre [producto]",
+    "Transformación: antes y después (30/60/90 días)",
+    "Educativo: 3 cosas que [producto] hace en tu cuerpo en 60s",
+    "Raw/auténtico: cámara fija, sin edición, talking head",
+    "Comparación: antes de X vs después de X lado a lado",
+    "Tutorial: así es como yo uso el BPC-157, paso a paso",
+    "Mito vs realidad: esto NO es lo que piensas"
+  ],
+  "compliance": [
+    "Prohibido mostrar jeringas o agujas en pantalla — ban automático en IG y TikTok",
+    "Prohibidas las palabras 'esteroides', 'dopaje', 'prohibido', 'ilegal' en TikTok",
+    "Prohibido afirmar que un producto 'cura', 'trata' o 'elimina' enfermedades",
+    "Evitar precios en el video — mejor 'link en bio' para no parecer spam",
+    "Evitar música con copyright — usar audio trending o sin licencia",
+    "Usar siempre: 'puede ayudar a...', 'en mi experiencia...', 'se ha estudiado que...'",
+    "Referirse siempre como 'producto de investigación' o 'suplemento de alto rendimiento'",
+    "Testimoniales en primera persona: 'yo', 'mi cuerpo', 'lo que sentí'"
+  ],
+  "tools": ["get_products", "publicar_blog", "estado_agente_blogs", "consultar_agente_seo"],
+  "woocommerce": true,
+  "sibling_agents": [
+    {"name": "Agente de Blogs", "url": "https://agente-blogs-production.up.railway.app/", "icon": "🟣", "desc": "Publica blogs en WP automáticamente"},
+    {"name": "Agente SEO", "url": "https://web-production-3743c.up.railway.app/", "icon": "🔵", "desc": "Optimiza productos y categorías WP"}
+  ],
+  "quick_prompts": [
+    {"icon": "🎬", "label": "Script Reel 30s bestsellers", "prompt": "Dame un script completo para un Reel de 30 segundos sobre nuestros péptidos más vendidos"},
+    {"icon": "🯝", "label": "5 Hooks virales TikTok", "prompt": "Genera 5 hooks virales para TikTok sobre suplementos para gym"},
+    {"icon": "📅", "label": "Calendario 2 semanas IG", "prompt": "Crea un calendario de contenido para Instagram de 2 semanas, 4 posts por semana, variando formatos"},
+    {"icon": "#️⃣", "label": "Hashtags México 2026", "prompt": "Dame los mejores hashtags para péptidos y suplementos en México en 2026, separados por IG y TikTok"},
+    {"icon": "🔬", "label": "Video educativo péptidos", "prompt": "Genera un script de video educativo de 60 segundos explicando qué son los péptidos de investigación"},
+    {"icon": "✨", "label": "Testimonial / Before-After", "prompt": "Crea un guion para video tipo testimonial o before/after para Instagram y TikTok"},
+    {"icon": "📚", "label": "Ver biblioteca", "prompt": "Muestra todo el contenido guardado en la biblioteca"}
+  ],
+  "cross_prompts": [
+    {"icon": "🟣", "label": "Ver último blog publicado", "prompt": "Consulta el estado del agente de blogs: qué fue lo último que publicó y si hay algún error activo"},
+    {"icon": "🔗", "label": "Video del último blog", "prompt": "Genera un script de video basado en el tema del último blog publicado, para crear contenido cruzado y consistente entre blog y redes sociales"},
+    {"icon": "⚡", "label": "Video + Blog simultáneo", "prompt": "Genera un script de 30 segundos sobre BPC-157 para IG y TikTok, y después publica un blog complementario sobre el mismo tema"},
+    {"icon": "🔵", "label": "Keywords del agente SEO", "prompt": "Consulta el agente SEO para obtener los títulos y palabras clave reales de nuestros productos, y úsalos como base para el script de video"}
+  ]
+}

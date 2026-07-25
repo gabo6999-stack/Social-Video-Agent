@@ -8,18 +8,23 @@ import psycopg2
 import psycopg2.extras
 import requests
 from datetime import datetime
-from flask import Flask, request, jsonify, Response, stream_with_context
+from flask import Flask, request, jsonify, Response, stream_with_context, render_template
 from requests.auth import HTTPBasicAuth
 import anthropic
 
-# ─── CONFIG ──────────────────────────────────────────────────────────────────
+from video_framework import VIDEO_FRAMEWORK
+
+# ─── CONFIG ──────────────────────────────────────────────────────────────────────────────────
+
+BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
+SITES_DIR = os.path.join(BASE_DIR, "sites")
 
 BLOG_AGENT_URL = os.environ.get("BLOG_AGENT_URL", "https://agente-blogs-production.up.railway.app")
 SEO_AGENT_URL  = os.environ.get("SEO_AGENT_URL",  "https://web-production-3743c.up.railway.app")
 WC_URL         = os.environ.get("WC_STORE_URL", "").rstrip("/")
 WC_KEY         = os.environ.get("WC_CONSUMER_KEY", "")
 WC_SECRET      = os.environ.get("WC_CONSUMER_SECRET", "")
-DATABASE_URL   = os.environ.get("DATABASE_URL", "")   # Railway inyecta esto automáticamente
+DATABASE_URL   = os.environ.get("DATABASE_URL", "")   # Railway inyecta esto automaticamente
 MODEL          = "claude-sonnet-4-6"
 
 app    = Flask(__name__)
@@ -42,10 +47,71 @@ def notify_nexus(action, detail=None, url=None):
     except Exception as e:
         print(f"[NEXUS] No se pudo reportar: {e}")
 
-# ─── BASE DE DATOS (PostgreSQL) ───────────────────────────────────────────────
+
+# ─── Sitios (multisitio) ───────────────────────────────────────────────
+
+def list_sites():
+    if not os.path.isdir(SITES_DIR):
+        return []
+    return sorted(f[:-5] for f in os.listdir(SITES_DIR) if f.endswith(".json"))
+
+
+def load_site(site_key):
+    path = os.path.join(SITES_DIR, f"{site_key}.json")
+    if not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_all_sites():
+    return [dict(load_site(k), key=k) for k in list_sites()]
+
+
+def build_system_prompt(site, platforms):
+    lines = [VIDEO_FRAMEWORK, "\n\n---\n\nPERFIL DEL SITIO ACTIVO:\n"]
+    lines.append(f"MARCA: {site['brand']} ({site.get('site_url', '')})")
+    lines.append(f"NICHO: {site['niche']}")
+    lines.append(f"AUDIENCIA: {site['audience']}")
+    lines.append(f"PLATAFORMA(S) DE ESTA SESIÓN: {', '.join(platforms)}")
+    lines.append(f"TONO: {site['tone']}")
+    lines.append(f"OBJETIVO: {site['goal']}")
+    lines.append(f"CONTEXTO DE NEGOCIO: {site.get('business_context', '-')}")
+    lines.append(f"HASHTAGS DE MARCA: {' '.join(site.get('brand_hashtags', []))}")
+
+    if site.get("product_angles"):
+        lines.append("\nÁNGULOS POR TEMA/PRODUCTO:")
+        for a in site["product_angles"]:
+            lines.append(f"- {a['product']}: {a['focus']} → ángulo: \"{a['angle']}\"")
+
+    if site.get("hooks_examples"):
+        lines.append("\nEJEMPLOS DE HOOKS QUE FUNCIONAN EN ESTE NICHO:")
+        for h in site["hooks_examples"]:
+            lines.append(f"- \"{h}\"")
+
+    if site.get("viral_formats"):
+        lines.append("\nFORMATOS QUE FUNCIONAN PARA ESTA MARCA:")
+        for vf in site["viral_formats"]:
+            lines.append(f"- {vf}")
+
+    if site.get("compliance"):
+        lines.append("\nCOMPLIANCE OBLIGATORIO PARA ESTE SITIO:")
+        for c in site["compliance"]:
+            lines.append(f"- {c}")
+
+    if site.get("sibling_agents"):
+        lines.append("\nAGENTES HERMANOS DISPONIBLES:")
+        for sa in site["sibling_agents"]:
+            lines.append(f"- {sa['name']}: {sa['desc']}")
+
+    text = "\n".join(lines) + f"\n\nHoy es {datetime.now().strftime('%Y-%m-%d')}."
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+
+# ─── BASE DE DATOS (PostgreSQL) ──────────────────────────────────────────
 
 def get_conn():
-    """Retorna una conexión a PostgreSQL usando DATABASE_URL de Railway."""
+    """Retorna una conexion a PostgreSQL usando DATABASE_URL de Railway."""
     return psycopg2.connect(DATABASE_URL)
 
 def init_db():
@@ -71,6 +137,18 @@ def init_db():
             created_at   TEXT
         )
     """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS agent_sessions (
+            session_id TEXT PRIMARY KEY,
+            site_key   TEXT,
+            platforms  TEXT,
+            updated_at TEXT
+        )
+    """)
+    # Migracion aditiva: sitios se agregaron despues de que estas tablas ya
+    # existian en produccion — content_library.site_key permite filtrar la
+    # biblioteca por sitio sin perder el contenido ya guardado.
+    cur.execute("ALTER TABLE content_library ADD COLUMN IF NOT EXISTS site_key TEXT")
     con.commit()
     cur.close()
     con.close()
@@ -110,7 +188,41 @@ def load_messages(session_id):
             messages.append({"role": role, "content": content})
     return messages
 
-# ─── HERRAMIENTAS ─────────────────────────────────────────────────────────────
+
+def save_session_site(session_id, site_key, platforms):
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute(
+        """
+        INSERT INTO agent_sessions (session_id, site_key, platforms, updated_at)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (session_id) DO UPDATE
+        SET site_key = EXCLUDED.site_key, platforms = EXCLUDED.platforms, updated_at = EXCLUDED.updated_at
+        """,
+        (session_id, site_key, json.dumps(platforms), datetime.now().isoformat())
+    )
+    con.commit()
+    cur.close()
+    con.close()
+
+
+def load_session_site(session_id):
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute("SELECT site_key, platforms FROM agent_sessions WHERE session_id = %s", (session_id,))
+    row = cur.fetchone()
+    cur.close()
+    con.close()
+    if not row:
+        return None, None
+    site_key, platforms = row
+    try:
+        platforms = json.loads(platforms)
+    except Exception:
+        platforms = []
+    return site_key, platforms
+
+# ─── HERRAMIENTAS ──────────────────────────────────────────────────────
 
 def get_products(per_page=20):
     if not WC_URL:
@@ -141,41 +253,39 @@ def get_products(per_page=20):
     except Exception as e:
         return {"error": str(e)}
 
-def save_content(title, platform, content_type, content, product=""):
+def save_content(site_key, title, platform, content_type, content, product=""):
     try:
         con = get_conn()
         cur = con.cursor()
         cur.execute(
-            "INSERT INTO content_library (title, platform, content_type, content, product, created_at) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-            (title, platform, content_type, content, product, datetime.now().isoformat())
+            "INSERT INTO content_library (title, platform, content_type, content, product, created_at, site_key) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            (title, platform, content_type, content, product, datetime.now().isoformat(), site_key)
         )
         item_id = cur.fetchone()[0]
         con.commit()
         cur.close()
         con.close()
         notify_nexus(
-            action="Generó un script de video",
-            detail=f"{content_type} — {title} ({platform})",
+            action="Genero un script de video",
+            detail=f"{content_type} — {title} ({platform}) [{site_key}]",
         )
         return {"success": True, "id": item_id, "saved": title}
     except Exception as e:
         return {"error": str(e)}
 
-def list_content(platform=None, content_type=None, limit=10):
+def list_content(site_key, platform=None, content_type=None, limit=10):
     try:
         con = get_conn()
         cur = con.cursor()
-        query  = "SELECT id, title, platform, content_type, product, created_at FROM content_library"
-        params = []
-        filters = []
+        query  = "SELECT id, title, platform, content_type, product, created_at FROM content_library WHERE site_key = %s"
+        params = [site_key]
         if platform:
-            filters.append("platform = %s")
+            query += " AND platform = %s"
             params.append(platform)
         if content_type:
-            filters.append("content_type = %s")
+            query += " AND content_type = %s"
             params.append(content_type)
-        if filters:
-            query += " WHERE " + " AND ".join(filters)
         query += " ORDER BY created_at DESC LIMIT %s"
         params.append(int(limit))
         cur.execute(query, params)
@@ -192,7 +302,7 @@ def list_content(platform=None, content_type=None, limit=10):
     except Exception as e:
         return {"error": str(e)}
 
-# ─── INTEGRACIÓN CON AGENTES HERMANOS ────────────────────────────────────────
+# ─── INTEGRACION CON AGENTES HERMANOS ──────────────────────────────────────
 
 def publicar_blog(topic=None, site_key="peptidosysuplementos"):
     try:
@@ -227,228 +337,22 @@ def consultar_agente_seo(instruccion):
         return {"error": str(e)}
 
 TOOL_FNS = {
-    "get_products":       get_products,
-    "save_content":       save_content,
-    "list_content":       list_content,
-    "publicar_blog":      publicar_blog,
+    "get_products":        get_products,
+    "save_content":        save_content,
+    "list_content":        list_content,
+    "publicar_blog":       publicar_blog,
     "estado_agente_blogs": estado_agente_blogs,
     "consultar_agente_seo": consultar_agente_seo,
 }
 
-def run_tool(name, inputs):
-    fn = TOOL_FNS.get(name)
-    if not fn:
-        return {"error": f"Herramienta no encontrada: {name}"}
-    try:
-        return fn(**inputs)
-    except Exception as e:
-        return {"error": str(e)}
-
-# ─── SYSTEM PROMPT (con prompt caching) ──────────────────────────────────────
-
-SYSTEM_PROMPT_TEXT = """Eres un agente experto en creacion de contenido de video para Instagram Reels y TikTok, especializado en la marca Peptidos y Suplementos (peptidosysuplementos.mx).
-
-Tu objetivo: scripts virales, autenticos y que conviertan para el mercado mexicano.
-
-══════════════════════════════════════════════
-ESPECIFICACIONES DE PLATAFORMA
-══════════════════════════════════════════════
-
-INSTAGRAM REELS:
-• Duracion ideal: 7-15s (alcance maximo), 30s, o hasta 90s
-• Formato vertical 9:16 (1080x1920px)
-• Hook en los primeros 3 segundos — critico para el algoritmo
-• Caption: max 2,200 caracteres; solo 125 visibles sin expandir
-• Hashtags: 3-5 muy especificos (calidad > cantidad en 2026)
-• CTA: "Visita el link en bio", "Comenta X", "Guarda este video"
-• Mejor horario MX: L-V 7-9am | 12-2pm | 7-9pm
-
-TIKTOK:
-• Duracion ideal: 21-34s (mayor completion rate), hasta 60s para educativo
-• Formato vertical 9:16 (1080x1920px)
-• Hook CRITICO en el primer segundo — sin intro, empieza en la accion
-• Caption: breve (150 chars ideal), max 2,200
-• Hashtags: 3-5 mixtos (1 trending, 2 nicho, 1 marca)
-• Mejor horario MX: L-V 6-9am | 6-9pm | Fines: 9-11am
-
-══════════════════════════════════════════════
-ESTRUCTURA DE UN VIDEO QUE CONVIERTE
-══════════════════════════════════════════════
-
-0-3s   HOOK      → Para el scroll. Sin intro, sin "hola soy X"
-3-15s  PROBLEMA  → Conecta con el dolor o deseo del espectador
-15-45s SOLUCIÓN  → El producto como respuesta, con datos reales
-45-55s PRUEBA    → Resultado, ingrediente clave, respaldo cientifico
-55-60s CTA       → Accion especifica y urgente
-
-══════════════════════════════════════════════
-HOOKS QUE CONVIERTEN — EJEMPLOS REALES DEL NICHO
-══════════════════════════════════════════════
-
-Por curiosidad/intriga:
-"¿Por qué yo me recupero en 2 dias y tu en una semana?"
-"El peptido que los atletas de elite no mencionen publicamente"
-"Esto le pasa a tu cuerpo a los 30 si no haces nada"
-
-Por promesa directa:
-"Probé el BPC-157 por 30 dias. Aqui los resultados reales."
-"La razon por la que no ves resultados en el gym (no es tu dieta)"
-"3 suplementos que uso cada dia para recuperarme como de 20 años"
-
-Por controversia/autoridad:
-"Lo que tu nutriologo no te dice sobre la recuperacion muscular"
-"Por que la proteina de supermercado es una perdida de dinero"
-"El error que comete el 90% de la gente que toma creatina"
-
-Por segmentacion directa:
-"Si tienes mas de 30 y entrenas, para y escucha esto"
-"Para los que entrenan con lesiones cronicas — esto es para ti"
-"Atencion: si llevas mas de 2 años en el gym sin progresar..."
-
-══════════════════════════════════════════════
-ÁNGULOS POR TIPO DE PRODUCTO
-══════════════════════════════════════════════
-
-BPC-157 / TB-500 (recuperacion):
-→ Lesiones cronicas, tendinitis, dolor articular, recuperacion post-entreno
-→ Angulo: "la solucion que los medicos no te ofrecen"
-
-Retatrutide / analogos GLP-1 (composicion corporal):
-→ Perdida de grasa sin perder musculo, resistencia a la insulina
-→ Angulo: "la ciencia detras de la perdida de grasa eficiente"
-
-GHK-Cu / MOTS-c / Longevidad:
-→ Biohacking, anti-aging, salud celular, rendimiento cognitivo
-→ Angulo: "invierte en tu cuerpo ahora para los proximos 30 anos"
-
-IGF-1 LR3 / HGH (performance):
-→ Masa muscular, fuerza, recuperacion, composicion corporal
-→ Angulo: "rendimiento de siguiente nivel"
-
-Proteinas / Creatina (basics):
-→ Onboarding gym, fundamentos, consistencia, primeros resultados
-→ Angulo: "lo que realmente funciona sin complicarse"
-
-══════════════════════════════════════════════
-FORMATOS VIRALES 2026
-══════════════════════════════════════════════
-
-• POV: "Un dia en mi vida usando X peptido"
-• Revelacion: "Lo que nadie te dice sobre [producto]"
-• Transformacion: Antes y despues (30/60/90 dias)
-• Educativo: "3 cosas que [producto] hace en tu cuerpo en 60s"
-• Raw/autentico: camara fija, sin edicion, talking head
-• Comparacion: "Antes de X vs despues de X" lado a lado
-• Tutorial: "Asi es como yo uso el BPC-157" paso a paso
-• Mito vs realidad: "Esto NO es lo que piensas"
-
-══════════════════════════════════════════════
-COSAS QUE EVITAR (algoritmo y compliance)
-══════════════════════════════════════════════
-
-❌ Mostrar jeringas o agujas en pantalla — ban automatico en IG y TikTok
-❌ Palabras: "esteroides", "dopaje", "prohibido", "ilegal" en TikTok
-❌ Afirmar que un producto "cura", "trata" o "elimina" enfermedades
-❌ Precios en el video — mejor "link en bio" para no parecer spam
-❌ Musica con copyright — usar audio trending o sin licencia
-❌ Intro larga — los primeros 2 segundos son todo
-
-✅ Usar: "puede ayudar a...", "en mi experiencia...", "se ha estudiado que..."
-✅ Siempre: "producto de investigacion" o "suplemento de alto rendimiento"
-✅ Testimoniales en primera persona: "yo", "mi cuerpo", "lo que senti"
-
-══════════════════════════════════════════════
-CONTEXTO DE NEGOCIO
-══════════════════════════════════════════════
-
-• Mercado: Mexico — tono cercano, tutear, no formal
-• Quincenas (1 y 15): mejores dias para lanzar promociones en video
-• Picos fitness: Enero-Marzo y Agosto-Septiembre
-• Hashtags de marca: #PeptidosYSuplementos #MxFitness #BiohackingMX
-• Precios siempre en MXN
-• Envio gratis en pedidos de MX$7,500 o mas — buen dato para CTA
-
-══════════════════════════════════════════════
-AGENTES INTEGRADOS
-══════════════════════════════════════════════
-
-🔵 AGENTE SEO → consultar_agente_seo
-Obtiene titulos y keywords reales del catalogo para enriquecer captions
-
-🟣 AGENTE DE BLOGS → publicar_blog + estado_agente_blogs
-Publica un blog complementario al video el mismo dia
-Pipeline: Google Trends → Claude escribe → Unsplash → WordPress
-
-ESTRATEGIA CRUZADA: video + blog el mismo dia = mas SEO + mas alcance
-
-══════════════════════════════════════════════
-FLUJO DE TRABAJO
-══════════════════════════════════════════════
-
-1. Si el usuario menciona un producto → get_products para datos reales
-2. Consulta estado_agente_blogs para saber que temas ya se cubrieron
-3. Genera script COMPLETO en el formato de abajo
-4. Siempre dos versiones: IG Reels + TikTok
-5. Guarda automaticamente con save_content
-6. Al final ofrece: variaciones de hook | version en ingles | publicar blog
-
-══════════════════════════════════════════════
-FORMATO DE SALIDA (usa EXACTAMENTE esta estructura)
-══════════════════════════════════════════════
-
----
-🎬 [NOMBRE DEL VIDEO]
-📱 Plataforma: [IG Reels / TikTok]
-⏱️ Duracion: [X segundos]
-🎯 Objetivo: [awareness / consideracion / conversion]
-
-HOOK (0-3s):
-"[texto exacto — entre comillas]"
-
-ESCENAS:
-[0-3s]   Visual: ... | Texto en pantalla: ... | Audio: ...
-[3-15s]  Visual: ... | Texto en pantalla: ... | Audio: ...
-[15-45s] Visual: ... | Texto en pantalla: ... | Audio: ...
-[45-55s] Visual: ... | Texto en pantalla: ... | Audio: ...
-[55-60s] Visual: ... | Texto en pantalla: ... | Audio: ...
-
-CAPTION:
-[texto completo con emojis, max 125 chars visibles primero]
-
-HASHTAGS:
-#hashtag1 #hashtag2 #hashtag3 #hashtag4 #hashtag5
-
-AUDIO SUGERIDO:
-[tendencia actual o tipo de audio para MX 2026]
-
-CTA:
-[llamada a accion especifica y urgente]
----
-
-Responde siempre en espanol salvo que el usuario escriba en ingles."""
-
-SYSTEM = [
-    {
-        "type": "text",
-        "text": SYSTEM_PROMPT_TEXT,
-        "cache_control": {"type": "ephemeral"},
-    }
-]
-
-TOOLS = [
-    {
-        "name": "get_products",
-        "description": "Obtiene el catalogo de Peptidos y Suplementos con nombre, precio, descripcion, categorias y stock. Usalo cuando el usuario mencione un producto especifico.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "per_page": {"type": "integer", "description": "Cantidad a obtener (max 100)", "default": 20}
-            }
-        }
-    },
-    {
+# Tools que siempre estan disponibles + su definicion. Las opcionales
+# (get_products, publicar_blog, estado_agente_blogs, consultar_agente_seo) se
+# agregan por sitio segun site["tools"] — asi un sitio sin WooCommerce ni
+# agentes hermanos (ej. arcademotors) nunca las ve ofrecidas por el modelo.
+BASE_TOOL_DEFS = {
+    "save_content": {
         "name": "save_content",
-        "description": "Guarda contenido generado en la biblioteca. Usalo automaticamente despues de generar cualquier script, caption o calendario.",
+        "description": "Guarda contenido generado en la biblioteca de este sitio. Usalo automaticamente despues de generar cualquier script, caption o calendario.",
         "input_schema": {
             "type": "object",
             "required": ["title", "platform", "content_type", "content"],
@@ -457,13 +361,13 @@ TOOLS = [
                 "platform":     {"type": "string", "description": "instagram | tiktok | ambas"},
                 "content_type": {"type": "string", "description": "script | caption | hook | calendar | hashtags | guion"},
                 "content":      {"type": "string", "description": "El contenido completo generado"},
-                "product":      {"type": "string", "description": "Nombre del producto asociado (vacio si es general)", "default": ""}
+                "product":      {"type": "string", "description": "Nombre del producto/tema asociado (vacio si es general)", "default": ""}
             }
         }
     },
-    {
+    "list_content": {
         "name": "list_content",
-        "description": "Lista el contenido previamente generado y guardado.",
+        "description": "Lista el contenido previamente generado y guardado para este sitio.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -473,49 +377,108 @@ TOOLS = [
             }
         }
     },
-    {
+}
+
+OPTIONAL_TOOL_DEFS = {
+    "get_products": {
+        "name": "get_products",
+        "description": "Obtiene el catalogo real de productos con nombre, precio, descripcion, categorias y stock. Usalo cuando el usuario mencione un producto especifico.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "per_page": {"type": "integer", "description": "Cantidad a obtener (max 100)", "default": 20}
+            }
+        }
+    },
+    "publicar_blog": {
         "name": "publicar_blog",
         "description": "Dispara el Agente de Blogs para publicar un articulo en WordPress sobre el mismo tema del video. Ideal para contenido cruzado: video + blog el mismo dia.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "topic":    {"type": "string", "description": "Tema especifico (ej: 'BPC-157 para recuperacion muscular'). Omitir para usar tendencias automaticamente."},
+                "topic":    {"type": "string", "description": "Tema especifico. Omitir para usar tendencias automaticamente."},
                 "site_key": {"type": "string", "default": "peptidosysuplementos"}
             }
         }
     },
-    {
+    "estado_agente_blogs": {
         "name": "estado_agente_blogs",
         "description": "Consulta el estado del Agente de Blogs: si esta corriendo, ultimo post publicado, errores. Util para alinear temas entre blog y video.",
-        "input_schema": {
-            "type": "object",
-            "properties": {}
-        }
+        "input_schema": {"type": "object", "properties": {}}
     },
-    {
+    "consultar_agente_seo": {
         "name": "consultar_agente_seo",
-        "description": "Llama al Agente SEO para obtener titulos reales, keywords optimizadas o descripciones del catalogo. Util para enriquecer captions con terminos exactos del producto.",
+        "description": "Llama al Agente SEO para obtener titulos reales, keywords optimizadas o descripciones del catalogo.",
         "input_schema": {
             "type": "object",
             "required": ["instruccion"],
             "properties": {
-                "instruccion": {"type": "string", "description": "Instruccion para el agente SEO. Ej: 'Dame los titulos de los productos de peptidos'"}
+                "instruccion": {"type": "string", "description": "Instruccion para el agente SEO."}
             }
         }
-    }
-]
+    },
+}
 
-# ─── RUTAS ────────────────────────────────────────────────────────────────────
+
+def build_tools(site):
+    tools = list(BASE_TOOL_DEFS.values())
+    for name in site.get("tools", []):
+        if name in OPTIONAL_TOOL_DEFS:
+            tools.append(OPTIONAL_TOOL_DEFS[name])
+    return tools
+
+
+def run_tool(name, inputs, site_key):
+    fn = TOOL_FNS.get(name)
+    if not fn:
+        return {"error": f"Herramienta no encontrada: {name}"}
+    try:
+        if name in ("save_content", "list_content"):
+            return fn(site_key=site_key, **inputs)
+        return fn(**inputs)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ─── RUTAS ──────────────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
-    return open("templates/index.html", encoding="utf-8").read()
+    return render_template("index.html", sites=load_all_sites())
+
+@app.route("/api/start", methods=["POST"])
+def api_start():
+    data = request.get_json(force=True) or {}
+    session_id = data.get("session_id")
+    site_key = data.get("site")
+    platforms = [p for p in (data.get("platforms") or []) if p]
+
+    if not session_id:
+        return jsonify({"error": "Falta session_id."}), 400
+    site = load_site(site_key)
+    if not site:
+        return jsonify({"error": "Sitio invalido."}), 400
+    if not platforms:
+        return jsonify({"error": "Selecciona al menos una red social."}), 400
+
+    save_session_site(session_id, site_key, platforms)
+    return jsonify({"brand": site["brand"], "platforms": platforms})
 
 @app.route("/chat", methods=["POST"])
 def chat():
     body       = request.json
     session_id = body.get("session_id", "default")
     new_messages = body.get("messages", [])
+
+    site_key, platforms = load_session_site(session_id)
+    if not site_key:
+        return jsonify({"error": "Sesion sin sitio asignado. Llama a /api/start primero."}), 400
+    site = load_site(site_key)
+    if not site:
+        return jsonify({"error": f"Sitio '{site_key}' ya no existe."}), 400
+
+    system = build_system_prompt(site, platforms)
+    tools = build_tools(site)
 
     saved = load_messages(session_id)
     if saved and new_messages:
@@ -528,12 +491,12 @@ def chat():
     def generate():
         nonlocal messages
         try:
-            # ── Fase 1: tool call loop (síncrono) ────────────────────────────
+            # ── Fase 1: tool call loop (sincrono) ────────────────────────
             response = client.messages.create(
                 model=MODEL,
                 max_tokens=8192,
-                system=SYSTEM,
-                tools=TOOLS,
+                system=system,
+                tools=tools,
                 messages=messages,
             )
 
@@ -551,7 +514,7 @@ def chat():
                 tr = []
                 for b in response.content:
                     if b.type == "tool_use":
-                        result = run_tool(b.name, b.input)
+                        result = run_tool(b.name, b.input, site_key)
                         tr.append({
                             "type": "tool_result",
                             "tool_use_id": b.id,
@@ -566,22 +529,19 @@ def chat():
                 response = client.messages.create(
                     model=MODEL,
                     max_tokens=8192,
-                    system=SYSTEM,
-                    tools=TOOLS,
+                    system=system,
+                    tools=tools,
                     messages=messages,
                 )
 
-            # ── Fase 2: extraer texto de la respuesta final de Fase 1 ────────
-            # Phase 1 ya tiene la respuesta final en response.content.
-            # Una segunda llamada sin tools= falla con 400 cuando hay
-            # tool_use/tool_result en el historial.
+            # ── Fase 2: extraer texto de la respuesta final de Fase 1 ────
             full_reply = ""
             for block in response.content:
                 if hasattr(block, "text") and block.text:
                     full_reply += block.text
                     yield f"data: {json.dumps({'text': block.text})}\n\n"
 
-            # ── Guardar en DB ─────────────────────────────────────────────────
+            # ── Guardar en DB ────────────────────────────────────
             if full_reply:
                 messages.append({"role": "assistant", "content": full_reply})
                 save_messages(session_id, messages)
@@ -603,9 +563,12 @@ def chat():
 
 @app.route("/content", methods=["GET"])
 def content_library():
+    site_key = request.args.get("site")
+    if not site_key:
+        return jsonify({"error": "Falta parametro site."}), 400
     platform     = request.args.get("platform")
     content_type = request.args.get("type")
-    items = list_content(platform, content_type, limit=30)
+    items = list_content(site_key, platform, content_type, limit=30)
     return jsonify({"items": items})
 
 @app.route("/chat/clear", methods=["POST"])
@@ -621,7 +584,7 @@ def clear_chat():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "model": MODEL, "agent": "social-video-agent"})
+    return jsonify({"status": "ok", "model": MODEL, "agent": "social-video-agent", "sites": list_sites()})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

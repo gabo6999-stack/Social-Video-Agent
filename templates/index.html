@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Video Agent — Peptidos y Suplementos</title>
+<title>Video Agent — multisitio</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -15,6 +15,35 @@
     display: flex;
     flex-direction: column;
   }
+
+  /* ── Setup gate ── */
+  #setup-gate {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+  }
+  #setup-card {
+    width: 100%; max-width: 440px; background: #1a1a1a; border: 1px solid #2a2a2a;
+    border-radius: 14px; padding: 28px;
+  }
+  #setup-card h2 { font-size: 18px; margin-bottom: 6px; }
+  #setup-card .hint { font-size: 12px; color: #777; margin-bottom: 20px; }
+  #setup-card label { display: block; font-size: 12px; color: #888; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  #setup-card select {
+    width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #333;
+    background: #0f0f0f; color: #f0f0f0; font-size: 14px;
+  }
+  .platform-options { display: flex; gap: 8px; flex-wrap: wrap; }
+  .platform-options label {
+    display: flex; align-items: center; gap: 6px; margin: 0;
+    padding: 8px 12px; border: 1px solid #333; border-radius: 8px;
+    color: #ddd; cursor: pointer; font-size: 13px; text-transform: none; letter-spacing: 0;
+  }
+  #setup-card button {
+    width: 100%; margin-top: 22px;
+    background: linear-gradient(135deg, #6a11cb, #e1306c);
+    color: white; border: none; border-radius: 10px;
+    padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  #setup-error { color: #ff6b6b; font-size: 13px; margin-top: 10px; }
 
   /* ── Header ── */
   header {
@@ -33,10 +62,13 @@
     padding: 3px 12px;
     font-size: 12px;
     cursor: pointer;
+    margin-left: 8px;
   }
   .badge:hover { background: rgba(255,255,255,0.3); }
+  .header-actions { display: flex; align-items: center; }
 
   /* ── Layout ── */
+  #app { display: none; flex: 1; flex-direction: column; overflow: hidden; }
   .layout {
     display: flex;
     flex: 1;
@@ -85,10 +117,8 @@
     gap: 6px;
   }
   .qbtn:hover { background: #2e2e2e; border-color: #e1306c; color: #fff; }
-  .qbtn.qbtn-blog { border-color: #3b1d6e; }
-  .qbtn.qbtn-blog:hover { border-color: #7c3aed; }
-  .qbtn.qbtn-seo { border-color: #1d3a6e; }
-  .qbtn.qbtn-seo:hover { border-color: #3b82f6; }
+  .qbtn.qbtn-cross { border-color: #3b1d6e; }
+  .qbtn.qbtn-cross:hover { border-color: #7c3aed; }
 
   /* ── Agent links ── */
   .agent-links {
@@ -301,12 +331,34 @@
 </head>
 <body>
 
+<!-- Pantalla de seleccion de sitio + plataforma -->
+<div id="setup-gate">
+  <div id="setup-card">
+    <h2>🎬 Video Agent</h2>
+    <div class="hint">¿Para qué sitio y red social vas a trabajar?</div>
+
+    <label for="site-select">Sitio</label>
+    <select id="site-select"></select>
+
+    <label>Red(es) social(es) de esta sesión</label>
+    <div id="platform-options" class="platform-options"></div>
+
+    <button id="start-btn" type="button">Comenzar</button>
+    <div id="setup-error"></div>
+  </div>
+</div>
+
+<div id="app">
+
 <header>
   <div>
-    <h1>🎬 Video Agent — Peptidos y Suplementos</h1>
-    <span>Instagram Reels &amp; TikTok • claude-sonnet-4-6</span>
+    <h1 id="hdr-title">🎬 Video Agent</h1>
+    <span id="hdr-sub">Instagram Reels &amp; TikTok • claude-sonnet-4-6</span>
   </div>
-  <span class="badge" onclick="clearChat()">+ Nueva sesion</span>
+  <div class="header-actions">
+    <span class="badge" onclick="switchSite()">Cambiar sitio</span>
+    <span class="badge" onclick="clearChat()">+ Nueva sesión</span>
+  </div>
 </header>
 
 <div class="layout">
@@ -314,63 +366,17 @@
   <!-- Sidebar -->
   <div class="sidebar">
 
-    <div class="sidebar-header">Acciones rapidas</div>
-    <div class="quick-btns">
-      <button class="qbtn" onclick="q('Dame un script completo para un Reel de 30 segundos sobre nuestros peptidos mas vendidos')">
-        <span>🎬</span>Script Reel 30s bestsellers
-      </button>
-      <button class="qbtn" onclick="q('Genera 5 hooks virales para TikTok sobre suplementos para gym')">
-        <span>🪝</span>5 Hooks virales TikTok
-      </button>
-      <button class="qbtn" onclick="q('Crea un calendario de contenido para Instagram de 2 semanas, 4 posts por semana, variando formatos')">
-        <span>📅</span>Calendario 2 semanas IG
-      </button>
-      <button class="qbtn" onclick="q('Dame los mejores hashtags para peptidos y suplementos en Mexico en 2026, separados por IG y TikTok')">
-        <span>#️⃣</span>Hashtags Mexico 2026
-      </button>
-      <button class="qbtn" onclick="q('Genera un script de video educativo de 60 segundos explicando que son los peptidos de investigacion')">
-        <span>🔬</span>Video educativo peptidos
-      </button>
-      <button class="qbtn" onclick="q('Crea un guion para video tipo testimonial o before/after para Instagram y TikTok')">
-        <span>✨</span>Testimonial / Before-After
-      </button>
-      <button class="qbtn" onclick="q('Muestra todo el contenido guardado en la biblioteca')">
-        <span>📚</span>Ver biblioteca
-      </button>
+    <div class="sidebar-header">Acciones rápidas</div>
+    <div class="quick-btns" id="quick-btns"></div>
+
+    <div id="cross-section" style="display:none">
+      <div class="sidebar-header">Contenido cruzado</div>
+      <div class="quick-btns" id="cross-btns"></div>
     </div>
 
-    <div class="sidebar-header">Contenido cruzado</div>
-    <div class="quick-btns">
-      <button class="qbtn qbtn-blog" onclick="q('Consulta el estado del agente de blogs: que fue lo ultimo que publico y si hay algun error activo')">
-        <span>🟣</span>Ver ultimo blog publicado
-      </button>
-      <button class="qbtn qbtn-blog" onclick="q('Genera un script de video basado en el tema del ultimo blog publicado, para crear contenido cruzado y consistente entre blog y redes sociales')">
-        <span>🔗</span>Video del ultimo blog
-      </button>
-      <button class="qbtn qbtn-blog" onclick="q('Genera un script de 30 segundos sobre BPC-157 para IG y TikTok, y despues publica un blog complementario sobre el mismo tema')">
-        <span>⚡</span>Video + Blog simultaneo
-      </button>
-      <button class="qbtn qbtn-seo" onclick="q('Consulta el agente SEO para obtener los titulos y palabras clave reales de nuestros productos, y usaos como base para el script de video')">
-        <span>🔵</span>Keywords del agente SEO
-      </button>
-    </div>
-
-    <div class="sidebar-header">Otros agentes</div>
-    <div class="agent-links">
-      <a class="agent-link" href="https://agente-blogs-production.up.railway.app/" target="_blank">
-        <span>🟣</span>
-        <div>
-          <div class="agent-link-name">Agente de Blogs</div>
-          <div class="agent-link-desc">Publica blogs en WP automaticamente</div>
-        </div>
-      </a>
-      <a class="agent-link" href="https://web-production-3743c.up.railway.app/" target="_blank">
-        <span>🔵</span>
-        <div>
-          <div class="agent-link-name">Agente SEO</div>
-          <div class="agent-link-desc">Optimiza productos y categorias WP</div>
-        </div>
-      </a>
+    <div id="agents-section" style="display:none">
+      <div class="sidebar-header">Otros agentes</div>
+      <div class="agent-links" id="agent-links"></div>
     </div>
 
     <div class="library-section">
@@ -385,8 +391,8 @@
     <div id="chat">
       <div class="empty-state" id="empty">
         <div class="logo">🎬</div>
-        <h2>Video Agent listo</h2>
-        <p>Genera scripts para Reels y TikTok, hooks virales, captions con hashtags y calendarios. Conectado al Agente de Blogs y Agente SEO.</p>
+        <h2 id="empty-title">Video Agent listo</h2>
+        <p id="empty-desc">Genera scripts para Reels y TikTok, hooks virales, captions con hashtags y calendarios.</p>
       </div>
     </div>
 
@@ -394,34 +400,158 @@
       <div class="input-row">
         <textarea
           id="inp"
-          placeholder="Ej: Dame un script de 30s para TikTok sobre el BPC-157 y publica un blog del mismo tema..."
+          placeholder="Escribe qué contenido necesitas..."
           rows="1"
           onkeydown="handleKey(event)"
           oninput="autoResize(this)"
         ></textarea>
         <button id="btn-send" onclick="enviar()">Generar ▶</button>
       </div>
-      <div class="input-hint">Enter para enviar • Shift+Enter para nueva linea</div>
+      <div class="input-hint">Enter para enviar • Shift+Enter para nueva línea</div>
     </div>
   </div>
 
 </div>
+</div>
 
 <script>
-var SESSION_ID = localStorage.getItem('video_session') || 'vs_' + Date.now();
-localStorage.setItem('video_session', SESSION_ID);
-
-var chatHistory = JSON.parse(localStorage.getItem('video_chat_' + SESSION_ID) || '[]');
+var SITES = {{ sites | tojson }};
+var ACTIVE_SITE = null;
+var SESSION_ID = null;
+var chatHistory = [];
 var busy = false;
 
-window.onload = function() {
+// ── Setup gate ─────────────────────────────────────────────────────────────────────
+function siteByKey(key) { return SITES.find(function(s){ return s.key === key; }); }
+
+function renderPlatformOptions(site) {
+  var div = document.getElementById('platform-options');
+  div.innerHTML = '';
+  site.platforms.forEach(function(p) {
+    var label = document.createElement('label');
+    var input = document.createElement('input');
+    input.type = 'checkbox'; input.value = p; input.checked = true;
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(p));
+    div.appendChild(label);
+  });
+}
+
+(function initGate() {
+  var select = document.getElementById('site-select');
+  SITES.forEach(function(s) {
+    var opt = document.createElement('option');
+    opt.value = s.key; opt.textContent = s.brand;
+    select.appendChild(opt);
+  });
+  var lastSite = localStorage.getItem('video_last_site');
+  if (lastSite && siteByKey(lastSite)) select.value = lastSite;
+  if (SITES.length) renderPlatformOptions(siteByKey(select.value));
+  select.addEventListener('change', function() { renderPlatformOptions(siteByKey(select.value)); });
+
+  document.getElementById('start-btn').addEventListener('click', startSession);
+})();
+
+async function startSession() {
+  var errEl = document.getElementById('setup-error');
+  errEl.textContent = '';
+  var siteKey = document.getElementById('site-select').value;
+  var platforms = Array.from(document.querySelectorAll('#platform-options input:checked')).map(function(i){ return i.value; });
+  if (!platforms.length) { errEl.textContent = 'Selecciona al menos una red social.'; return; }
+
+  localStorage.setItem('video_last_site', siteKey);
+  SESSION_ID = localStorage.getItem('video_session_' + siteKey) || (siteKey + '_' + Date.now());
+  localStorage.setItem('video_session_' + siteKey, SESSION_ID);
+
+  var res = await fetch('/api/start', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({session_id: SESSION_ID, site: siteKey, platforms: platforms})
+  });
+  var data = await res.json();
+  if (!res.ok) { errEl.textContent = data.error || 'Error al iniciar.'; return; }
+
+  ACTIVE_SITE = siteByKey(siteKey);
+  ACTIVE_SITE.activePlatforms = platforms;
+  mountApp();
+}
+
+function switchSite() {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('setup-gate').style.display = 'flex';
+}
+
+// ── App principal ─────────────────────────────────────────────────────────────────────
+function mountApp() {
+  document.getElementById('setup-gate').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+
+  document.getElementById('hdr-title').textContent = '🎬 Video Agent — ' + ACTIVE_SITE.brand;
+  document.getElementById('hdr-sub').textContent = ACTIVE_SITE.activePlatforms.join(' + ') + ' • claude-sonnet-4-6';
+  document.getElementById('empty-title').textContent = ACTIVE_SITE.brand + ' listo';
+  document.getElementById('empty-desc').textContent = 'Genera scripts para Reels y TikTok, hooks virales, captions con hashtags y calendarios.';
+
+  renderQuickButtons();
+  renderAgentLinks();
+
+  chatHistory = JSON.parse(localStorage.getItem('video_chat_' + SESSION_ID) || '[]');
+  document.getElementById('chat').innerHTML =
+    '<div class="empty-state" id="empty"><div class="logo">🎬</div>' +
+    '<h2 id="empty-title">' + escHtml(ACTIVE_SITE.brand) + ' listo</h2>' +
+    '<p id="empty-desc">Genera scripts para Reels y TikTok, hooks virales, captions con hashtags y calendarios.</p></div>';
   chatHistory.forEach(function(m) {
     if (typeof m.content !== 'string') return;
     if (m.role === 'user') appendUserMsg(m.content);
     else appendAgentMsg(m.content);
   });
   loadLibrary();
-};
+  document.getElementById('inp').focus();
+}
+
+function renderQuickButtons() {
+  var qDiv = document.getElementById('quick-btns');
+  qDiv.innerHTML = '';
+  (ACTIVE_SITE.quick_prompts || []).forEach(function(qp) {
+    var btn = document.createElement('button');
+    btn.className = 'qbtn';
+    btn.innerHTML = '<span>' + qp.icon + '</span>' + escHtml(qp.label);
+    btn.onclick = function() { q(qp.prompt); };
+    qDiv.appendChild(btn);
+  });
+
+  var crossSection = document.getElementById('cross-section');
+  var crossDiv = document.getElementById('cross-btns');
+  crossDiv.innerHTML = '';
+  var crossPrompts = ACTIVE_SITE.cross_prompts || [];
+  if (crossPrompts.length) {
+    crossSection.style.display = 'block';
+    crossPrompts.forEach(function(qp) {
+      var btn = document.createElement('button');
+      btn.className = 'qbtn qbtn-cross';
+      btn.innerHTML = '<span>' + qp.icon + '</span>' + escHtml(qp.label);
+      btn.onclick = function() { q(qp.prompt); };
+      crossDiv.appendChild(btn);
+    });
+  } else {
+    crossSection.style.display = 'none';
+  }
+}
+
+function renderAgentLinks() {
+  var section = document.getElementById('agents-section');
+  var div = document.getElementById('agent-links');
+  div.innerHTML = '';
+  var agents = ACTIVE_SITE.sibling_agents || [];
+  if (!agents.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  agents.forEach(function(a) {
+    var link = document.createElement('a');
+    link.className = 'agent-link'; link.href = a.url; link.target = '_blank';
+    link.innerHTML =
+      '<span>' + a.icon + '</span><div><div class="agent-link-name">' + escHtml(a.name) +
+      '</div><div class="agent-link-desc">' + escHtml(a.desc) + '</div></div>';
+    div.appendChild(link);
+  });
+}
 
 function autoResize(el) {
   el.style.height = 'auto';
@@ -476,7 +606,6 @@ function appendAgentMsg(text) {
   return el;
 }
 
-// Crea burbuja vacía que se va llenando con streaming
 function createStreamingBubble() {
   removeEmpty();
   var chat = document.getElementById('chat');
@@ -490,7 +619,6 @@ function createStreamingBubble() {
 
 function finalizeStreamingBubble(el, fullText) {
   el.removeAttribute('data-streaming');
-  // agregar botón copiar al terminar
   var btn = document.createElement('button');
   btn.className = 'copy-btn';
   btn.textContent = 'Copiar';
@@ -518,12 +646,11 @@ async function enviar() {
   localStorage.setItem('video_chat_' + SESSION_ID, JSON.stringify(chatHistory));
   appendUserMsg(msg);
 
-  // Indicador de herramientas activas
   var chat = document.getElementById('chat');
   var toolIndicator = document.createElement('div');
   toolIndicator.className = 'msg-loading';
   toolIndicator.id = 'tool-indicator';
-  toolIndicator.innerHTML = 'Consultando datos<span class="dots"></span>';
+  toolIndicator.innerHTML = 'Pensando<span class="dots"></span>';
   chat.appendChild(toolIndicator);
   chat.scrollTop = chat.scrollHeight;
 
@@ -547,7 +674,7 @@ async function enviar() {
 
       buffer += decoder.decode(chunk.value, {stream: true});
       var lines = buffer.split('\n');
-      buffer = lines.pop(); // última línea puede estar incompleta
+      buffer = lines.pop();
 
       for (var i = 0; i < lines.length; i++) {
         var line = lines[i].trim();
@@ -559,16 +686,14 @@ async function enviar() {
         try { data = JSON.parse(raw); } catch(e) { continue; }
 
         if (data.tool) {
-          // Actualizar indicador con la herramienta que se está usando
           var ti = document.getElementById('tool-indicator');
           if (ti) ti.innerHTML = '⚙️ ' + escHtml(data.tool) + '<span class="dots"></span>';
         }
 
         if (data.text) {
-          // Primera vez que llega texto: quitar indicador y crear burbuja
           if (!agentBubble) {
-            var ti = document.getElementById('tool-indicator');
-            if (ti) ti.remove();
+            var ti2 = document.getElementById('tool-indicator');
+            if (ti2) ti2.remove();
             agentBubble = createStreamingBubble();
           }
           fullReply += data.text;
@@ -586,16 +711,16 @@ async function enviar() {
         }
 
         if (data.error) {
-          var ti = document.getElementById('tool-indicator');
-          if (ti) ti.remove();
+          var ti3 = document.getElementById('tool-indicator');
+          if (ti3) ti3.remove();
           appendAgentMsg('Error: ' + data.error);
         }
       }
     }
   } catch(e) {
-    var ti = document.getElementById('tool-indicator');
-    if (ti) ti.remove();
-    appendAgentMsg('Error de conexion: ' + e.message);
+    var ti4 = document.getElementById('tool-indicator');
+    if (ti4) ti4.remove();
+    appendAgentMsg('Error de conexión: ' + e.message);
   }
 
   busy = false;
@@ -603,32 +728,36 @@ async function enviar() {
 }
 
 function clearChat() {
-  if (!confirm('Iniciar nueva sesion?')) return;
+  if (!confirm('Iniciar nueva sesión?')) return;
   fetch('/chat/clear', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({session_id: SESSION_ID})
-  }).then(function() {
-    SESSION_ID = 'vs_' + Date.now();
-    localStorage.setItem('video_session', SESSION_ID);
+  }).then(async function() {
+    SESSION_ID = ACTIVE_SITE.key + '_' + Date.now();
+    localStorage.setItem('video_session_' + ACTIVE_SITE.key, SESSION_ID);
+    await fetch('/api/start', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({session_id: SESSION_ID, site: ACTIVE_SITE.key, platforms: ACTIVE_SITE.activePlatforms})
+    });
     chatHistory = [];
     localStorage.setItem('video_chat_' + SESSION_ID, '[]');
     document.getElementById('chat').innerHTML =
       '<div class="empty-state" id="empty">' +
         '<div class="logo">🎬</div>' +
-        '<h2>Video Agent listo</h2>' +
-        '<p>Genera scripts para Reels y TikTok, hooks virales, captions con hashtags y calendarios. Conectado al Agente de Blogs y Agente SEO.</p>' +
+        '<h2>' + escHtml(ACTIVE_SITE.brand) + ' listo</h2>' +
+        '<p>Genera scripts para Reels y TikTok, hooks virales, captions con hashtags y calendarios.</p>' +
       '</div>';
   });
 }
 
 function loadLibrary() {
-  fetch('/content')
+  fetch('/content?site=' + encodeURIComponent(ACTIVE_SITE.key))
     .then(function(r) { return r.json(); })
     .then(function(d) {
       var list = document.getElementById('library-list');
       if (!d.items || d.items.length === 0) {
-        list.innerHTML = '<span style="color:#555;font-size:12px">Aun no hay contenido guardado</span>';
+        list.innerHTML = '<span style="color:#555;font-size:12px">Aún no hay contenido guardado</span>';
         return;
       }
       list.innerHTML = '';
